@@ -1,0 +1,329 @@
+{
+  "name": "Personal Finance system",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data0",
+        "options": {
+          "password": ""
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        160
+      ],
+      "id": "fe7f6999-270d-43d7-8155-ec33d17e7547",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert data extraction system designed to parse financial bank statements and produce clean structured CSV output.\n\nthe input \n{{ $json.text }}\n\nThe input will be raw extracted text (usually from PDFs) that may contain one or more bank account statements.\n\nYour task is to identify and extract all transaction records, normalize the headers, detect UPI sender/receiver names, extract transaction tags, and output them as a single combined CSV table.\n\n🔍 Your Objectives\n1. Detect and Normalize Headers\n\nRecognize and standardize header names — they may appear in different forms such as:\n\nDATE NARRATION CHQ.NO. WITHDRAWAL (DR) DEPOSIT (CR) BALANCE  \nTran Date Chq No Particulars Debit Credit Balance  \nTxn Date Description Ref No./Cheque No. Debit Credit Balance\n\n\nUse these mappings:\n\nPossible Header\tNormalized Header\nTran Date / Txn Date / Date\tDATE\nParticulars / Description / Transaction Details / Narration\tNARRATION\nChq No / Cheque No / Ref No./Cheque No.\tCHQ.NO.\nDebit / Withdrawals / Withdrawal (DR)\tWITHDRAWAL (DR)\nCredit / Deposits / Deposit (CR)\tDEPOSIT (CR)\nBalance\tBALANCE\n2. Add Account Number\n\nDetect account numbers like A/C No: 00400100033462 or similar.\n\nAdd a new column ACCOUNT_NUMBER as the first column.\n\nApply the detected account number to all subsequent transactions until another one is found.\n\n3. Combine Multi-line Narrations\n\nMerge narration text that spills across multiple lines.\n\nRemove stray symbols (>, /n, etc.) and combine fragmented text cleanly.\n\nEnsure each transaction narration appears in a single continuous line.\n\n4. Extract UPI Sender / Receiver / Merchant Name\n\nDetect the person or merchant name in UPI transactions and store it in a new column PARTY_NAME.\n\nExtract names or merchant identifiers from narration patterns like:\n\nUPI/P2M/.../<merchant>\nUPI/P2A/.../<person name>\n/UPI/.../<Bank Name>\n\n\nExamples:\n\nExample Narration\tExtracted PARTY_NAME\nUPI/P2M/528938084257/EKART\tEKART\nUPI/P2M/565759780965/Zepto Marketplace\tZepto Marketplace\nUPI/P2M/566079901701/Blinkit\tBlinkit\nUPI/P2A/529644489935/SAYANDEEP SHARMA\tSAYANDEEP SHARMA\nUPI/P2A/983234965037/ARIJIT D\tARIJIT D\n\nIf no recognizable name or merchant appears, leave PARTY_NAME blank.\n\n5. Extract Transaction Tags\n\nFrom the narration text, extract transaction tags to help categorize the transaction.\n\nStore them in a new column TAGS.\n\nTags are meaningful keywords derived from narration text — such as merchant names, platforms, transaction types, or channels.\n\nExamples:\n\nExample Narration\tExtracted TAGS\nUPI/P2M/528938084257/EKART /Payment/YES BANK LIMITED YBS\tUPI, Payment, EKART, YES BANK\nATM WDL 24/10/2025 HDFC ATM KOLKATA\tATM, Withdrawal, HDFC\nNEFT Cr from ABC INFOTECH LTD Salary\tNEFT, Salary, ABC INFOTECH\nIMPS 230324766982 Transfer to RAJ KUMAR\tIMPS, Transfer, RAJ KUMAR\n\nIf no clear tags can be derived, leave TAGS blank.\n\n6. Exclude Opening and Closing Balances\n\nDo not include rows containing “Opening Balance” or “Closing Balance”.\n\nOnly include actual financial transactions.\n\n7. Handle Missing or Noisy Fields\n\nIf CHQ.NO. is blank, leave it empty.\n\nClean numeric fields (WITHDRAWAL (DR) and DEPOSIT (CR)) to only contain plain numbers (remove commas, “Cr”, “Dr”, etc.).\n\nIgnore headers, footers, or messages like “This is a computer-generated statement”.\n\n🧾 Final CSV Format\n\nHeader:\n\nACCOUNT_NUMBER,DATE,NARRATION,PARTY_NAME,TAGS,CHQ.NO.,WITHDRAWAL (DR),DEPOSIT (CR)\n\n\nEach transaction should appear as one row under this header.\n\n💡 Example Output\n\nInput:\n\nA/C No: 00400100033462\nTran Date Chq No Particulars Debit Credit Balance\n01-09-2025 Opening Balance 0.00 40815.44\n18-10-2025 UPI/P2M/528938084257/EKART /Payment/YES BANK LIMITED YBS 325.00 34914.53\n23-10-2025 UPI/P2A/529644489935/SAYANDEEP SHARMA /UPI/AXIS BANK 822.00 31533.53\n25-10-2025 UPI/P2A/983234965037/ARIJIT D /Kotak Mah/Bhai fot/ 1500.00 33033.53\n31-10-2025 Closing Balance 33033.53\n\n\nOutput:\n\nACCOUNT_NUMBER,DATE,NARRATION,PARTY_NAME,TAGS,CHQ.NO.,WITHDRAWAL (DR),DEPOSIT (CR)\n00400100033462,18-10-2025,UPI/P2M/528938084257/EKART /Payment/YES BANK LIMITED YBS,EKART,UPI,Payment,EKART,YES BANK,,325.00,0.00\n00400100033462,23-10-2025,UPI/P2A/529644489935/SAYANDEEP SHARMA /UPI/AXIS BANK,SAYANDEEP SHARMA,UPI,Transfer,AXIS BANK,,822.00,0.00\n00400100033462,25-10-2025,UPI/P2A/983234965037/ARIJIT D /Kotak Mah/Bhai fot/,ARIJIT D,UPI,Transfer,Kotak Mahindra,,1500.00,0.00\n\n\n✅ Output Rules\n\nOutput only the CSV table — no explanations, markdown, or commentary.\n\nPreserve transaction order.\n\nCombine all detected accounts in a single CSV output.\n\nExclude Opening/Closing balance rows.\n\nInclude PARTY_NAME and TAGS as additional columns.\n\nExclude BALANCE column completely."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        160
+      ],
+      "id": "da34a6ba-6374-45ac-af07-e34a66273fb1",
+      "name": "PDF to Csv extraction",
+      "executeOnce": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6Eggm8XTqphHF2e3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a financial transaction categorization system.\n\nCategorize each transaction in the table below based on the provided category definitions.\n\n### Transaction Table:\n{{ JSON.stringify($json.data.transactions, null, 2) }}\n\n### Categories Reference:\n{{ JSON.stringify($json.data.categories, null, 2) }}\n\nReturn a JSON array with:\n- Date\n- Txn Details\n- Withdrawal\n- Deposit\n- Party Name\n- Tags\n- Account Number\n- Predicted Category\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        432,
+        144
+      ],
+      "id": "85c95208-ceff-452e-81c8-470afe66c216",
+      "name": "Categorization",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6Eggm8XTqphHF2e3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import json\n\noutput = []\n\nfor item in _input.all():\n    # Extract raw text (the JSON string)\n    content = item[\"json\"].get(\"content\", {}).get(\"parts\", [{}])[0].get(\"text\", \"\")\n\n    # Parse JSON string into list of dicts\n    try:\n        data = json.loads(content)\n    except Exception as e:\n        raise Exception(f\"Invalid JSON input: {e}\")\n\n    # Clean and flatten each transaction\n    for row in data:\n        clean_row = {\n            \"Date\": str(row.get(\"DATE\", \"\")).strip(),\n            \"Account Number\": str(row.get(\"ACCOUNT_NUMBER\", \"\")).strip(),\n            \"Txn Details\": str(row.get(\"NARRATION\", \"\")).strip(),\n            \"Withdrawal\": str(row.get(\"WITHDRAWAL (DR)\", \"\")).strip(),\n            \"Deposit\": str(row.get(\"DEPOSIT (CR)\", \"\")).strip(),\n            \"Party Name\": str(row.get(\"PARTY_NAME\", \"\")).strip(),\n            \"Tags\": str(row.get(\"TAGS\", \"\")).strip(),\n        }\n        output.append({\"json\": clean_row})\n\nreturn output\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        160
+      ],
+      "id": "c7ec36b7-97b5-476c-8d5a-cf2d9466ebe7",
+      "name": "Final Transac Data"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "# Get all items from both nodes\nTransactionNodeData = _(\"Final Transac Data\").all()\nCategoriesNodeData = _(\"Categories\").all()\n\n# Extract JSON data\ntransactions = [item.json for item in TransactionNodeData]\ncategories = [item.json for item in CategoriesNodeData]\n\n# Combine both under one key \"data\"\nreturn [{\n    \"json\": {\n        \"data\": {\n            \"transactions\": transactions,\n            \"categories\": categories\n        }\n    }\n}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        144
+      ],
+      "id": "2e4b803d-309e-47e9-9fb3-4747cd751f7e",
+      "name": "Combine transactions and categories",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "collection": "categories",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -368,
+        -16
+      ],
+      "id": "92fa6ec0-aa0e-4e7c-abb5-80c1953d6309",
+      "name": "Categories",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "L7d9IoGHpBxvTX1t",
+          "name": "catepgroes"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import json\n\n# Simulated result from your Categorization node\nTransactionNodeData = [\n    {\n        \"content\": {\n            \"parts\": [\n                {\n                    \"text\": \"```json\\n[\\n  {\\n    \\\"Date\\\": \\\"2023-10-26\\\",\\n    \\\"Txn Details\\\": \\\"Starbucks Coffee\\\",\\n    \\\"Withdrawal\\\": \\\"5.75\\\",\\n    \\\"Deposit\\\": \\\"\\\",\\n    \\\"Party Name\\\": \\\"Starbucks\\\",\\n    \\\"Tags\\\": \\\"\\\",\\n    \\\"Predicted Category\\\": \\\"Dining\\\"\\n  }\\n]\\n```\"\n                }\n            ],\n            \"role\": \"model\"\n        },\n        \"finishReason\": \"STOP\",\n        \"index\": 0\n    }\n]\n\n# ✅ Extract the text\nraw_text = _input.first().json.content.parts[0].text\n\n# ✅ Clean Markdown formatting (remove ```json and ``` markers)\nclean_text = raw_text.replace(\"```json\", \"\").replace(\"```\", \"\").strip()\n\n# ✅ Parse as JSON (convert string → Python list/dict)\ntransactions = json.loads(clean_text)\n\n# ✅ Return or print it\nreturn transactions\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        144
+      ],
+      "id": "f3060d73-6905-4a83-a792-4a4ee7beed23",
+      "name": "Show categorised data"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -112,
+        144
+      ],
+      "id": "b3465d3f-241a-45af-937f-aa9cf090564e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fdae9055-c7b0-4a86-97aa-276a42a9ce9f",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1456,
+        160
+      ],
+      "id": "7ccb7ab5-38e7-44fd-9f17-4685bb250646",
+      "name": "Get PDF",
+      "webhookId": "fdae9055-c7b0-4a86-97aa-276a42a9ce9f"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        992,
+        144
+      ],
+      "id": "3b210120-270f-4e26-8193-e6e6fa185f68",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "PDF to Csv extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF to Csv extraction": {
+      "main": [
+        [
+          {
+            "node": "Final Transac Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorization": {
+      "main": [
+        [
+          {
+            "node": "Show categorised data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Transac Data": {
+      "main": [
+        [
+          {
+            "node": "Categories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Categories": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine transactions and categories": {
+      "main": [
+        [
+          {
+            "node": "Categorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Show categorised data": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Combine transactions and categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "76f30003-ad7a-495a-b416-f337ad16445e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5887903158c7e3db9162ba5bee03486d18a75d321841a3edd242e5205a856fcc"
+  },
+  "id": "4rdLZlbxDw04teB6",
+  "tags": [
+    {
+      "createdAt": "2025-10-25T23:04:10.278Z",
+      "updatedAt": "2025-10-25T23:04:10.278Z",
+      "id": "Ut1KIajTfVfkNFFE",
+      "name": "POC"
+    }
+  ]
+}
