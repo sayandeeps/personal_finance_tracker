@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AI Finance Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+font-family: Arial;
+background:#f4f6f8;
+margin:40px;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+button{
+background:#2563eb;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+margin-top:20px;
+border-collapse:collapse;
+}
+
+td,th{
+border-bottom:1px solid #eee;
+padding:10px;
+}
+
+canvas{
+margin-top:40px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>AI Bank Statement Analyzer</h2>
+
+<input type="file" id="pdfFile">
+<button onclick="upload()">Analyze Statement</button>
+
+<canvas id="categoryChart"></canvas>
+<canvas id="cashFlow"></canvas>
+
+<table id="table">
+<thead>
+<tr>
+<th>Date</th>
+<th>Details</th>
+<th>Withdrawal</th>
+<th>Deposit</th>
+<th>Category</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+</div>
+
+<script>
+
+async function upload(){
+
+const file = document.getElementById("pdfFile").files[0]
+
+const formData = new FormData()
+formData.append("data", file)
+
+const response = await fetch(
+"http://personal.n8n.com:5678/webhook-test/fdae9055-c7b0-4a86-97aa-276a42a9ce9f",
+{
+method:"POST",
+body:formData
+})
+
+const data = await response.json()
+
+renderTable(data)
+renderCharts(data)
+
+}
+
+function renderTable(data){
+
+const table = document.querySelector("#table tbody")
+table.innerHTML=""
+
+data.forEach(t => {
+
+const row = `
+<tr>
+<td>${t.Date}</td>
+<td>${t["Txn Details"]}</td>
+<td>${t.Withdrawal}</td>
+<td>${t.Deposit}</td>
+<td>${t["Predicted Category"]}</td>
+</tr>
+`
+
+table.innerHTML += row
+
+})
+
+}
+
+function renderCharts(data){
+
+const categories = {}
+let income=0
+let expense=0
+
+data.forEach(t=>{
+
+const cat = t["Predicted Category"]
+
+if(!categories[cat]) categories[cat]=0
+
+const amount = Number(t.Withdrawal || t.Deposit)
+
+categories[cat]+=amount
+
+if(t.Withdrawal)
+expense+=amount
+else
+income+=amount
+
+})
+
+new Chart(
+document.getElementById("categoryChart"),
+{
+type:"pie",
+data:{
+labels:Object.keys(categories),
+datasets:[{
+data:Object.values(categories)
+}]
+}
+})
+
+new Chart(
+document.getElementById("cashFlow"),
+{
+type:"bar",
+data:{
+labels:["Income","Expense"],
+datasets:[{
+data:[income,expense]
+}]
+}
+})
+
+}
+
+</script>
+
+</body>
+</html>
